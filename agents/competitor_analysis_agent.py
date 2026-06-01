@@ -21,8 +21,9 @@ pricing, ratings, and market signals. Format in clear markdown with headers and 
 class CompetitorAnalysisAgent:
     def __init__(self):
         self.client = openai.OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=os.getenv("OPENAI_API_KEY", "learner042"),
             base_url=os.getenv("OPENAI_BASE_URL", "https://keygateway.arshnivlabs.com"),
+            timeout=60.0,
         )
 
     def analyze(self, raw_data: str, customer_insights: str, sales_insights: str) -> str:

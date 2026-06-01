@@ -45,11 +45,6 @@ def _init_state():
 
 
 def _check_api_key() -> bool:
-    key = os.getenv("OPENAI_API_KEY", "")
-    if not key or key == "your_openai_api_key_here":
-        st.error("⚠️ OPENAI_API_KEY is not set. Add it to a `.env` file or set it as an environment variable.")
-        st.code("OPENAI_API_KEY=sk-...", language="bash")
-        return False
     return True
 
 
@@ -188,8 +183,9 @@ def _handle_chat(question: str, results: dict, vector_store) -> str:
     import openai as _openai
 
     client = _openai.OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
+        api_key=os.getenv("OPENAI_API_KEY", "learner042"),
         base_url=os.getenv("OPENAI_BASE_URL", "https://keygateway.arshnivlabs.com"),
+        timeout=60.0,
     )
 
     rag_context = ""

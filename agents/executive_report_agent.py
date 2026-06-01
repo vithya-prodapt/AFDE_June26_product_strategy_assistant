@@ -31,8 +31,9 @@ Write in executive language: concise, data-driven, action-oriented. No fluff. Ev
 class ExecutiveReportAgent:
     def __init__(self):
         self.client = openai.OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=os.getenv("OPENAI_API_KEY", "learner042"),
             base_url=os.getenv("OPENAI_BASE_URL", "https://keygateway.arshnivlabs.com"),
+            timeout=60.0,
         )
 
     def analyze(self, all_results: dict) -> str:

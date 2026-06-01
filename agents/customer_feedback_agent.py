@@ -20,8 +20,9 @@ Format your response in clear markdown with headers and bullet points."""
 class CustomerFeedbackAgent:
     def __init__(self):
         self.client = openai.OpenAI(
-            api_key=os.getenv("OPENAI_API_KEY"),
+            api_key=os.getenv("OPENAI_API_KEY", "learner042"),
             base_url=os.getenv("OPENAI_BASE_URL", "https://keygateway.arshnivlabs.com"),
+            timeout=60.0,
         )
 
     def analyze(self, data: str) -> str:
