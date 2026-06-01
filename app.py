@@ -38,6 +38,7 @@ def _init_state():
         "chat_history": [],
         "vector_store": None,
         "agent_status": [],
+        "dataframe": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -111,6 +112,7 @@ def _run_analysis(uploaded_files):
         vs = VectorStore()
         vs.add_documents(processed_data)
         st.session_state.vector_store = vs
+        st.session_state.dataframe = processed_data.get("dataframe")
 
     with st.spinner("Running 6 AI Agents..."):
         orchestrator = AgentOrchestrator()
@@ -128,7 +130,7 @@ def _download_pdf():
     from utils.pdf_generator import PDFGenerator
     with st.spinner("Generating PDF..."):
         gen = PDFGenerator()
-        pdf_bytes = gen.generate(st.session_state.analysis_results)
+        pdf_bytes = gen.generate(st.session_state.analysis_results, dataframe=st.session_state.get("dataframe"))
     st.sidebar.download_button(
         label="⬇️ Download PDF",
         data=pdf_bytes,
@@ -224,6 +226,104 @@ Provide a concise, data-driven strategic answer."""
     return response.choices[0].message.content
 
 
+# ── Interactive Dashboards ───────────────────────────────────────────────────
+def _render_sales_charts(df):
+    import plotly.express as px
+    import pandas as pd
+
+    st.subheader("📊 Interactive Sales Dashboard")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if "Product_Name" in df.columns and "Revenue_USD" in df.columns:
+            prod = df.groupby("Product_Name")["Revenue_USD"].sum().reset_index()
+            prod = prod.sort_values("Revenue_USD")
+            fig = px.bar(prod, x="Revenue_USD", y="Product_Name", orientation="h",
+                         title="Revenue by Product", color="Revenue_USD",
+                         color_continuous_scale="Blues")
+            fig.update_layout(showlegend=False, height=320, margin=dict(l=0, r=10, t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        if "Region" in df.columns and "Profit_USD" in df.columns:
+            reg = df.groupby("Region")["Profit_USD"].sum().reset_index()
+            fig = px.bar(reg, x="Region", y="Profit_USD", title="Profit by Region",
+                         color="Profit_USD", color_continuous_scale="Greens")
+            fig.update_layout(showlegend=False, height=320, margin=dict(l=0, r=10, t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    col3, col4 = st.columns(2)
+
+    with col3:
+        if "Category" in df.columns and "Revenue_USD" in df.columns:
+            cat = df.groupby("Category")["Revenue_USD"].sum().reset_index()
+            fig = px.pie(cat, values="Revenue_USD", names="Category",
+                         title="Revenue by Category", hole=0.4)
+            fig.update_layout(height=320, margin=dict(l=0, r=0, t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col4:
+        if "Date" in df.columns and "Revenue_USD" in df.columns:
+            df2 = df.copy()
+            df2["Date"] = pd.to_datetime(df2["Date"], errors="coerce")
+            df2["Month"] = df2["Date"].dt.to_period("M").astype(str)
+            monthly = df2.groupby("Month")["Revenue_USD"].sum().reset_index()
+            fig = px.line(monthly, x="Month", y="Revenue_USD",
+                          title="Monthly Revenue Trend", markers=True)
+            fig.update_layout(height=320, margin=dict(l=0, r=10, t=40, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+    if "Product_Name" in df.columns and "Customer_Rating" in df.columns:
+        rating = df.groupby("Product_Name")["Customer_Rating"].mean().reset_index()
+        rating = rating.sort_values("Customer_Rating", ascending=False)
+        fig = px.bar(rating, x="Product_Name", y="Customer_Rating",
+                     title="Avg. Customer Rating by Product",
+                     color="Customer_Rating", color_continuous_scale="RdYlGn",
+                     range_color=[3.5, 5.0])
+        fig.update_layout(height=300, margin=dict(l=0, r=10, t=40, b=40), xaxis_tickangle=-30)
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+
+def _render_opportunity_scores(df):
+    import plotly.express as px
+    import pandas as pd
+
+    if "Product_Name" not in df.columns:
+        return
+
+    st.subheader("🎯 Product Opportunity Score")
+
+    agg = {c: ("sum" if c != "Customer_Rating" else "mean")
+           for c in ["Revenue_USD", "Profit_USD", "Units_Sold",
+                     "Returns", "Customer_Rating", "Marketing_Spend_USD"]
+           if c in df.columns}
+    prod = df.groupby("Product_Name").agg(agg).round(2)
+
+    if "Revenue_USD" in prod.columns and "Customer_Rating" in prod.columns:
+        rev_n = (prod["Revenue_USD"] - prod["Revenue_USD"].min()) / (prod["Revenue_USD"].max() - prod["Revenue_USD"].min() + 1)
+        rat_n = (prod["Customer_Rating"] - 1) / 4
+        if "Returns" in prod.columns and "Units_Sold" in prod.columns:
+            rr = prod["Returns"] / (prod["Units_Sold"] + 1)
+            ret_n = 1 - (rr - rr.min()) / (rr.max() - rr.min() + 0.001)
+        else:
+            ret_n = 0.5
+        prod["Opportunity_Score"] = (rev_n * 0.4 + rat_n * 0.35 + ret_n * 0.25) * 100
+        prod["Opportunity_Score"] = prod["Opportunity_Score"].round(1)
+        prod["Priority"] = pd.cut(prod["Opportunity_Score"], bins=[0, 40, 70, 100],
+                                  labels=["Low", "Medium", "High"])
+
+        fig = px.bar(prod.reset_index().sort_values("Opportunity_Score"),
+                     x="Opportunity_Score", y="Product_Name", orientation="h",
+                     color="Opportunity_Score", color_continuous_scale="RdYlGn",
+                     range_color=[0, 100], title="Opportunity Score (0–100)")
+        fig.update_layout(height=340, showlegend=False, margin=dict(l=0, r=10, t=40, b=0))
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.divider()
+
+
 # ── Welcome screen ───────────────────────────────────────────────────────────
 def render_welcome():
     st.markdown("<div class='main-header'>🧠 AI Product Strategy Assistant</div>", unsafe_allow_html=True)
@@ -278,6 +378,9 @@ def render_results(results: dict):
 
     with tab3:
         st.header("Sales Analysis")
+        df = st.session_state.get("dataframe")
+        if df is not None:
+            _render_sales_charts(df)
         st.markdown(results.get("sales_analysis", "No data"))
 
     with tab4:
@@ -290,6 +393,9 @@ def render_results(results: dict):
 
     with tab6:
         st.header("Feature Prioritization Recommendations")
+        df = st.session_state.get("dataframe")
+        if df is not None:
+            _render_opportunity_scores(df)
         st.markdown(results.get("feature_prioritization", "No data"))
 
     with tab7:

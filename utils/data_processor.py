@@ -8,11 +8,13 @@ class DataProcessor:
         all_text_parts = []
         csv_analysis = ""
         documents = []
+        dataframe = None
 
         for file in uploaded_files:
             name = file.name if hasattr(file, "name") else str(file)
             if name.endswith(".csv"):
                 df = pd.read_csv(io.BytesIO(file.read()) if hasattr(file, "read") else file)
+                dataframe = df
                 summary = self._analyze_csv(df)
                 all_text_parts.append(f"=== Sales/Product Data ===\n{summary}")
                 csv_analysis = summary
@@ -36,6 +38,7 @@ class DataProcessor:
             "summary": summary,
             "csv_analysis": csv_analysis if csv_analysis else summary,
             "documents": documents if documents else self._chunk_text(summary),
+            "dataframe": dataframe,
         }
 
     def _analyze_csv(self, df: pd.DataFrame) -> str:
